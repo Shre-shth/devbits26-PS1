@@ -1,0 +1,6 @@
+faster-whisper
+piper-tts
+langchain-google-genai
+pyaudio
+numpy
+webrtcvad
