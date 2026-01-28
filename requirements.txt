@@ -4,3 +4,4 @@ langchain-google-genai
 pyaudio
 numpy
 webrtcvad
+onnxruntime
