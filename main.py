@@ -41,7 +41,7 @@ class VoiceBot:
         
         # Duration Check (Barge-In)
         self.barge_in_chunks = 0
-        self.BARGE_IN_CHUNKS_THRESHOLD = 6 # ~200ms
+        self.BARGE_IN_CHUNKS_THRESHOLD = 15 # ~480ms (increased from 6/200ms to avoid false triggers)
         
         # Audio I/O
         self.p = pyaudio.PyAudio()
@@ -95,8 +95,11 @@ class VoiceBot:
             energy = np.abs(audio_int16).mean()
             # Threshold to ignore echo/noise
             if energy < self.BARGE_IN_ENERGY_THRESHOLD:
+                print(f"\r[Echo Gate] Ignored. Energy: {energy:.2f} < {self.BARGE_IN_ENERGY_THRESHOLD}", end="", flush=True)
                 # Ignore this chunk for barge-in
                 return
+            else:
+                print(f"\r[Echo Gate] PASSED! Energy: {energy:.2f} > {self.BARGE_IN_ENERGY_THRESHOLD}", end="", flush=True)
 
         # --- VAD LOGIC ---
         # vad() returns dict or None (or dict with prob key)
@@ -131,7 +134,6 @@ class VoiceBot:
              self.process_turn(full_audio)
              return
 
-        # 3. If triggered (inside speech segment), BUFFER audio
         if self.vad.triggered:
              self.buffer.extend(audio_chunk)
 
@@ -140,7 +142,7 @@ class VoiceBot:
         if prob > self.vad.threshold:
             self.barge_in_chunks += 1
             
-            # Check duration (6 chunks ~ 200ms)
+            # Check duration
             if self.barge_in_chunks >= self.BARGE_IN_CHUNKS_THRESHOLD:
                 print("\n[!] BARGE-IN DETECTED - (Duration > 200ms)")
                 
@@ -151,13 +153,7 @@ class VoiceBot:
                 self.set_state(CallState.LISTENING)
                 
                 # 3. Capture this chunk!
-                # Wait, we should probably have been capturing the *previous* chunks too if we want full fidelity.
-                # But for now, starting from the trigger point + current buffer is okay.
-                # Ideally, we should have a rolling buffer for VAD? 
-                # For simplicity, extend buffer.
                 self.buffer.extend(audio_chunk)
-                
-                # Note: Reset duration counter done in set_state(LISTENING)
         else:
              # Reset if continuous speech breaks
              self.barge_in_chunks = 0
