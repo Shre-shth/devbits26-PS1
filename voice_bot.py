@@ -4,7 +4,7 @@ import queue
 import threading
 import numpy as np
 import pyaudio
-import webrtcvad
+import onnxruntime
 from faster_whisper import WhisperModel
 import wave
 import collections
@@ -13,11 +13,10 @@ import collections
 RATE = 16000
 CHANNELS = 1
 FORMAT = pyaudio.paInt16
-CHUNK_DURATION_MS = 30  # Supports 10, 20, 30
-CHUNK_SIZE = int(RATE * CHUNK_DURATION_MS / 1000)
+CHUNK_SIZE = 1024 # frames per buffer
 
 class AudioRecorder:
-    def __init__(self, input_device_index=None, silence_threshold_ms=1000, speech_pad_ms=500, energy_threshold=2000):
+    def __init__(self, input_device_index=None, silence_threshold_ms=600, speech_pad_ms=500, energy_threshold=1000):
         self.audio = pyaudio.PyAudio()
         self.stream = self.audio.open(
             format=FORMAT,
@@ -27,7 +26,7 @@ class AudioRecorder:
             input_device_index=input_device_index,
             frames_per_buffer=CHUNK_SIZE
         )
-        self.vad = webrtcvad.Vad(3)  # Aggressiveness: 0-3 (Increased to 3 to filter noise)
+        
         self.silence_threshold_ms = silence_threshold_ms
         self.speech_pad_ms = speech_pad_ms
         self.energy_threshold = energy_threshold
@@ -36,13 +35,6 @@ class AudioRecorder:
         self.listening = False
         self.paused = False
 
-    def is_speech(self, frame):
-        try:
-            return self.vad.is_speech(frame, RATE)
-        except Exception as e:
-            print(f"VAD Error: {e}")
-            return False
-    
     def pause(self):
         self.paused = True
     
@@ -50,68 +42,78 @@ class AudioRecorder:
         self.paused = False
 
     def listen(self):
-        print("Listening...")
+        print(f"Listening (Energy Threshold: {self.energy_threshold})...")
         self.running = True
         self.listening = True
         
+        # Duration represented by CHUNK_SIZE
+        chunk_duration_ms = (CHUNK_SIZE / RATE) * 1000
+        
         num_silent_chunks = 0
-        max_silent_chunks = int(self.silence_threshold_ms / CHUNK_DURATION_MS)
+        max_silent_chunks = int(self.silence_threshold_ms / chunk_duration_ms)
         speech_started = False
         frames = []
-
+        
+        # Pre-speech buffer to catch the start of words
+        pre_speech_buffer = collections.deque(maxlen=10)
+        
         while self.running:
             if self.paused:
-                # Keep draining the buffer while paused so we don't have old audio when resuming
+                time.sleep(0.1)
                 try:
+                    # Flush stream buffer to avoid old audio
                     while self.stream.get_read_available() > CHUNK_SIZE:
                         self.stream.read(CHUNK_SIZE, exception_on_overflow=False)
                 except Exception:
                     pass
-                
-                time.sleep(0.1)
                 continue
                 
             try:
                 data = self.stream.read(CHUNK_SIZE, exception_on_overflow=False)
                 
-                # Calculate energy (amplitude)
+                # Calculate energy
                 audio_np = np.frombuffer(data, dtype=np.int16)
                 energy = np.abs(audio_np).mean()
-                
-                # Noise Gate: Force silence if energy is too low, regardless of VAD
-                # Lowered threshold to 20 since user reports low volume detection
-                is_speech = self.is_speech(data)
-                
-                if energy < self.energy_threshold:
-                    is_speech = False
 
-                # VU Meter Visualization
+                # Simple VAD based on Energy
+                is_speech = energy > self.energy_threshold
+
+                # VU Meter
                 status = "SPEECH" if is_speech else "......"
-                bars = "#" * int(energy / 50) # Scale down for visualization
-                print(f"\rVol: {energy:6.1f} [{status}] |{bars.ljust(50)}|", end="", flush=True)
+                print(f"\rVol: {energy:6.1f} [{status}]", end="", flush=True)
 
                 if is_speech:
                     if not speech_started:
-                        print(f"\nSpeech detection started (Energy: {energy:.2f})") # Newline to break VU meter line
+                        print(f"\rVol: {energy:6.1f} [START]   ")
+                        # Prepend buffer
+                        frames.extend(pre_speech_buffer)
+                        pre_speech_buffer.clear()
+                        
                     speech_started = True
                     num_silent_chunks = 0
                     frames.append(data)
                 elif speech_started:
                     num_silent_chunks += 1
                     frames.append(data)
+                    
                     if num_silent_chunks > max_silent_chunks:
-                        print("Silence detected, processing speech...")
-                        # Return audio data
-                        audio_data = b''.join(frames[:-max_silent_chunks]) # Trim end silence
-                        self.q.put(audio_data)
+                        print(f"\rVol: {energy:6.1f} [END]     ")
+                        
+                        # Filter short clicks (e.g. < 200ms)
+                        if len(frames) > 6:
+                            # Return audio data
+                            audio_data = b''.join(frames[:-max_silent_chunks]) 
+                            self.q.put(audio_data)
+                        else:
+                            print("Ignored short noise.")
                         
                         # Reset for next phrase
                         speech_started = False
                         frames = []
                         num_silent_chunks = 0
                 else:
-                    # Keep a small buffer of pre-speech audio? 
-                    # For now just ignore silence before speech
+                    # Buffer silence for pre-roll
+                    pre_speech_buffer.append(data)
                     pass
                 
             except Exception as e:
@@ -156,33 +158,51 @@ class Transcriber:
 class LLMClient:
     def __init__(self, api_key):
         from langchain_google_genai import ChatGoogleGenerativeAI
-        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
         from langchain_core.output_parsers import StrOutputParser
+        from langchain_core.messages import HumanMessage, AIMessage
 
         if not api_key:
             raise ValueError("Google API Key is required for Gemini.")
 
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-flash-latest", 
+            model="gemini-2.5-flash-lite", 
             temperature=0.7, 
             google_api_key=api_key
         )
         
-        # System prompt to keep responses concise for voice conversation
-        system_template = """You are a helpful voice assistant. 
-        Keep your responses concise and conversational, suitable for text-to-speech. 
-        Avoid markdown formatting like bullets or bold text unless necessary for emphasis in speech.
-        Limit your responses to 1-2 sentences unless asked for more detail."""
+        # Store conversation history
+        self.chat_history = []
+        
+        # System prompt for General Assistant
+        system_template = """You should act as a customer care agent for general purpose. ask specific questions to the user regarding the query.
+Constraints & Quality Control
+Low Latency: Keep your responses concise (under 2 sentences) to minimize processing time and avoid awkward silences.
+No Hallucinations: If you do not have specific data on a project’s price, offer to have a human representative send the latest brochure instead of making up numbers.
+Interruption Handling: If the user starts speaking while you are responding, acknowledge the interruption immediately and pivot to their new question.
+also dont generate response with specific symbols like *,#,etc.
+        """
         
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", system_template),
+            MessagesPlaceholder(variable_name="chat_history"),
             ("human", "{input}"),
         ])
         
         self.chain = self.prompt | self.llm | StrOutputParser()
 
     def generate_response(self, text):
-        return self.chain.stream({"input": text})
+        from langchain_core.messages import HumanMessage, AIMessage
+        
+        full_response = ""
+        for chunk in self.chain.stream({"input": text, "chat_history": self.chat_history}):
+            full_response += chunk
+            yield chunk
+            
+        # Update history after full response is generated
+        # We store the full response in history, even with the profile tag, so the bot "remembers" it outputted it.
+        self.chat_history.append(HumanMessage(content=text))
+        self.chat_history.append(AIMessage(content=full_response))
 
 class Synthesizer:
     def __init__(self, model_path="en_US-ryan-medium.onnx"):
@@ -262,8 +282,6 @@ class Synthesizer:
         if buffer.strip():
             self._synthesize_and_play(buffer.strip())
     
-            self._synthesize_and_play(buffer.strip())
-    
     def wait_until_done(self):
         """Blocks until all audio in the queue has been played."""
         self.audio_queue.join()
@@ -276,11 +294,14 @@ class Synthesizer:
     def _synthesize_and_play(self, text):
         try:
             # Piper synthesize yields audio chunks
-            # Piper synthesize yields audio chunks
             for audio_chunk in self.voice.synthesize(text):
                 self.audio_queue.put(audio_chunk.audio_int16_bytes)
         except Exception as e:
             print(f"TTS Error: {e}")
+
+    def _unused_method(self):
+        # Placeholder to maintain structure if needed, but we removed the profile filtering
+        pass
 
     def close(self):
         self.audio_queue.put(None) # Signal thread to stop
@@ -291,9 +312,13 @@ class Synthesizer:
 
 class VoiceBot:
     def __init__(self, device_index=None):
+        from dotenv import load_dotenv
+        # Force override to ensure we use the key from .env, ignoring stale shell variables
+        load_dotenv(override=True)
+        
         api_key = os.environ.get("GOOGLE_API_KEY")
         if not api_key:
-             print("Please set GOOGLE_API_KEY environment variable.")
+             print("Please set GOOGLE_API_KEY environment variable or in .env file.")
              sys.exit(1)
              
         print(f"DEBUG: VoiceBot using API Key ending in '...{api_key[-4:]}'")
@@ -301,39 +326,72 @@ class VoiceBot:
         self.transcriber = Transcriber(model_size="small.en", device="cpu", compute_type="int8") # Use 'medium' on GPU
         self.llm = LLMClient(api_key)
         self.synthesizer = Synthesizer()
+
         
+
+
+
+
     def start(self):
         play_thread = threading.Thread(target=self.recorder.listen)
         play_thread.start()
         
-        print("\n\n--- Voice Bot Instance Started ---")
+        print("\n\n--- Voice Bot Instance Started (Customer Care Mode) ---")
         print("Speak into your microphone...")
+        
+        # Buffer to accumulate audio across "thinking pauses"
+        self.turn_audio_buffer = bytearray()
+
+        
         
         try:
             while True:
-                # 1. Capture
-                audio_data = self.recorder.get_audio()
+                # 1. Capture (Wait for silence)
+                chunk_audio = self.recorder.get_audio()
                 
-                # Pause recording while processing/speaking
+                # Append to current turn buffer
+                self.turn_audio_buffer.extend(chunk_audio)
+                
+                # Pause recording while processing
                 self.recorder.pause()
                 
                 try:
-                    # 2. Transcribe
-                    print("Transcribing...", end=" ", flush=True)
-                    user_text, lang = self.transcriber.transcribe(audio_data)
+                    # 2. Transcribe (Provisional)
+                    print("Checking for completeness...", end=" ", flush=True)
+                    # Convert bytearray to bytes for transcriber
+                    full_turn_audio = bytes(self.turn_audio_buffer)
+                    user_text, lang = self.transcriber.transcribe(full_turn_audio)
                     print(f"User ({lang}): {user_text}")
                     
-                    if len(user_text.strip()) < 2:
+                    if len(user_text.strip()) < 1:
+                        # Probably just noise
+                        print("Noise detected, ignoring...")
+                        # We might want to clear buffer if it's just pure noise to avoid drift, 
+                        # but for now let's keep accumulating just in case it was a quiet start.
+                        self.recorder.resume()
                         continue
-    
-                    # 3. LLM & TTS Pipeline
+                        
+
+                    
+                    # --- Phrase is Complete -> Process Response ---
+                    
+                    # Clear buffer for next turn
+                    self.turn_audio_buffer = bytearray()
+
+                    # 4. LLM & TTS Pipeline
                     print("Gemini responding...", flush=True)
                     
                     try:
+                        self.full_accumulated_response = ""
+                        
                         def text_generator():
                             first_token_received = False
                             start_time = time.time()
+                            
                             for chunk in self.llm.generate_response(user_text):
+                                self.full_accumulated_response += chunk
+                                
+                                # Normal text
                                 if chunk:
                                     if not first_token_received:
                                         print(f"\n[Perf] Time to First Token: {time.time() - start_time:.2f}s")
@@ -344,9 +402,16 @@ class VoiceBot:
                         
                         self.synthesizer.speak_stream(text_generator())
                         self.synthesizer.wait_until_done()
+                        
+
                     except Exception as e:
-                        print(f"\n[AI ERROR]: {e}")
-                        self.synthesizer.speak_text("Sorry, I'm having trouble connecting to my brain right now.")
+                        error_msg = str(e)
+                        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+                            print(f"\n[AI GEN LIMIT]: Quota exceeded. Please wait a moment.")
+                            self.synthesizer.speak_text("I'm exhausted. Please give me a minute to recover.")
+                        else:
+                            print(f"\n[AI ERROR]: {e}")
+                            self.synthesizer.speak_text("Sorry, I'm having trouble connecting to my brain right now.")
                     
                 finally:
                     # Resume recording

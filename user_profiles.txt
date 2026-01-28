@@ -1,0 +1,117 @@
+{
+  "name": "Vishu Karma",
+  "contact": "Not provided",
+  "request_type": "Railway",
+  "summary": "Assisted with a railway ticket query for Varanasi to Kanpur on January 31st (3rd AC) and provided the approximate price of 850 rupees."
+}
+---
+Customer Need: Purchase a 3BHK flat.
+Location Preference: Civil Lines, Kanpur (near Z Square).
+Budget: Up to 2 crore INR.
+Status: Information gathering complete.
+---
+Customer Need: Purchase a 3BHK flat.
+Location Preference: Civil Lines, Kanpur (near Z Square).
+Budget: Up to 2 crore INR.
+Status: Search initiated.
+---
+Customer Need: Purchase a 3BHK flat.
+Location Preference: Civil Lines, Kanpur (near Z Square).
+Budget: Up to 2 crore INR.
+Status: Search initiated; Conversation closed.
+---
+Customer Need: Purchase a 3BHK flat.
+Location Preference: Civil Lines, Kanpur (near Z Square).
+Budget: Up to 2 crore INR.
+Status: Search initiated; Conversation closed.
+---
+Customer Need: Purchase a 3BHK flat.
+Location Preference: Civil Lines, Kanpur (near Z Square).
+Budget: Up to 2 crore INR.
+Contact Method: Mobile (9559108383).
+Status: Search initiated; Contact details finalized.
+---
+Customer Need: Purchase a 3BHK flat.
+Location Preference: Civil Lines, Kanpur (near Z Square).
+Budget: Up to 2 crore INR.
+Contact Method: Mobile (9559108383); Email (sresht.vishwakarma.7@gmail.com).
+Status: Search initiated; Contact details finalized.
+---
+Customer Need: Purchase a 3BHK flat.
+Location Preference: Civil Lines, Kanpur (near Z Square).
+Budget: Up to 2 crore INR.
+Contact Method: Mobile (9559108383); Email (shreshth.vishwakarma.7@gmail.com).
+Status: Search initiated; Contact details finalized and corrected.
+---
+Customer Need: Purchase a 3BHK flat.
+Location Preference: Civil Lines, Kanpur (near Z Square).
+Budget: Up to 2 crore INR.
+Contact Method: Mobile (9559108383); Email (shreshth.bishwakarma.7@gmail.com).
+Status: Search initiated; Contact details finalized and corrected.
+---
+Customer Need: Purchase a 3BHK flat.
+Location Preference: Civil Lines, Kanpur (near Z Square).
+Budget: Up to 2 crore INR.
+Contact Method: Mobile (9559108383); Email (shreshth.vishwakarma.7@gmail.com).
+Status: Search initiated; Contact details finalized and corrected.
+---
+Customer Need: Purchase a 3BHK flat.
+Location Preference: Civil Lines, Kanpur (near Z Square).
+Budget: Up to 2 crore INR.
+Contact Method: Mobile (9559108383); Email (shreshth.vishwakarma.7@gmail.com).
+Action Item: Send list of 10 properties via email.
+Status: Search initiated; Conversation complete.
+---
+Customer Need: Purchase a 3BHK flat.
+Location Preference: Civil Lines, Kanpur (near Z Square).
+Budget: Up to 2 crore INR.
+Contact Method: Mobile (9559108383); Email (shreshth.vishwakarma.7@gmail.com).
+Action Item: Send list of 10 properties via email.
+Status: Search initiated; Conversation closed.
+---
+User ended the conversation immediately. No request was made, and no service was provided.
+---
+User Request: Initially requested assistance in buying an IPIL match ticket.
+Specific Requirements: RCB match in Lucknow.
+Refinement 1: Requested RCB vs LG match in March.
+Final Confirmed Event: RCB vs LG match on March 22nd in Lucknow.
+Ticket Interest: Showed interest in purchasing tickets after receiving price options (Pavilion View: ₹8,500, Corporate Box: ₹15,000, Upper Stand: ₹3,200), but did not specify the category before concluding.
+Rejected Request: Attempted to book a movie ticket (Durandar 2 on March 20th), which was denied as it falls outside company services.
+Conclusion: Conversation concluded before the final ticket purchase was made or category specified.
+---
+User Name: Unknown
+User Request/Goal: Unknown
+Action Pending: None
+---
+Name: Rieszt
+Request: N/A
+Status: Initial Contact
+---
+Name: Rieszt
+Request: N/A
+Status: Contact Established
+---
+Name: Rieszt
+Request: N/A (Clarification needed)
+Status: Contact Established
+---
+Name: Rieszt
+Request: N/A (Clarification needed)
+Status: Awaiting Request
+---
+Name: Rieszt
+Request: N/A (User seems to be repeating a phrase unrelated to business needs)
+Status: Clarification Attempt 2
+---
+Name: Rieszt
+Request: N/A (User asking for movie suggestion - redirected to business context)
+Status: Redirected to Business Scope
+---
+Name: Rieszt
+Request: N/A (User asking for movie ticket - redirected to business context)
+Status: Redirected to Business Scope
+---
+Name: Rieszt
+Request: N/A (User repeating unrelated phrase)
+Status: Urgent Clarification Needed
+---
