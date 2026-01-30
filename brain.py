@@ -14,14 +14,12 @@ class Brain:
         # Use valid model name
         self.model = genai.GenerativeModel('gemini-2.5-flash')
         
-        # Initialize chat history (native format)
-        # History is managed by the chat session object in this SDK,
-        # but for simplicity we can manage it manually or use start_chat().
-        # Let's use start_chat(history=[]) for automatic history management.
-        self.chat_session = self.model.start_chat(history=[
+        # Initialize chat history (manual list management)
+        # We process history manually to avoid "response not iterated" errors on interruption
+        self.history = [
             {"role": "user", "parts": ["You are a helpful customer service voice bot. Keep your responses concise (1-2 sentences). Do not use markdown symbols like * or #. If interrupted, stop immediately."]},
             {"role": "model", "parts": ["Understood. I will be concise and helpful."]}
-        ])
+        ]
 
     def generate_response_stream(self, text):
         """
@@ -31,20 +29,29 @@ class Brain:
         try:
             print(f"[Brain] Requesting stream for: '{text}'")
             
-            # Use the chat session to send a message
-            # stream=True returns a generator immediately
-            response_stream = self.chat_session.send_message(text, stream=True)
+            # Add user message to history buffer
+            self.history.append({"role": "user", "parts": [text]})
+            
+            # Generate content using stateless request
+            response_stream = self.model.generate_content(
+                self.history,
+                stream=True
+            )
             
             for chunk in response_stream:
                 if chunk.text:
                     print(f"[Brain] Chunk: {chunk.text}", flush=True)
                     full_response += chunk.text
                     yield chunk.text
+            
+            # If completed successfully, add model response to history
+            if full_response.strip():
+                self.history.append({"role": "model", "parts": [full_response]})
                     
         except Exception as e:
             print(f"Brain Error: {e}", flush=True)
-            yield " Fuck off"
-            # In case of error, we might want to manually revert the history? 
-            # The native SDk handles failed turns gracefully usually.
-            
-        # Note: History is automatically updated by the chat_session object!
+            # Rollback history on error (remove user message)
+            if self.history and self.history[-1]["role"] == "user":
+                 self.history.pop()
+                 
+            yield "Fuck off buddy !!"

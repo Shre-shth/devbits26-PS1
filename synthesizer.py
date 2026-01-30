@@ -3,6 +3,7 @@ import pyaudio
 import queue
 import threading
 import os
+import numpy as np
 
 class Synthesizer:
     def __init__(self, model_path="en_US-ryan-medium.onnx"):
@@ -12,6 +13,7 @@ class Synthesizer:
         self.voice = PiperVoice.load(model_path)
         self.audio_queue = queue.Queue()
         self.is_playing = False
+        self.current_energy = 0.0 # Exposed for Echo Gate
         
         # Output stream
         self.p = pyaudio.PyAudio()
@@ -24,32 +26,53 @@ class Synthesizer:
         
         self.playback_thread = threading.Thread(target=self._playback_worker, daemon=True)
         self.playback_thread.start()
+        
+        # Interruption Control
+        self.abort_event = threading.Event()
 
     def _playback_worker(self):
+        CHUNK_SIZE = 1024 # Small chunk for responsive interruption
+        
         while True:
-            audio_chunk = self.audio_queue.get()
-            if audio_chunk is None:
+            audio_data = self.audio_queue.get()
+            if audio_data is None:
                 self.audio_queue.task_done()
                 break
             
             try:
-                self.is_playing = True
-                self.stream.write(audio_chunk)
+                # We split the large audio_data into small chunks to allow frequent abort checks
+                # play in chunks
+                for i in range(0, len(audio_data), CHUNK_SIZE):
+                    if self.abort_event.is_set():
+                        break
+                        
+                    chunk = audio_data[i:i+CHUNK_SIZE]
+                    
+                    # Calculate Energy (RMS) on the fly for the gate
+                    audio_np = np.frombuffer(chunk, dtype=np.int16).astype(np.float32)
+                    if len(audio_np) > 0:
+                         self.current_energy = np.sqrt(np.mean(audio_np**2))
+                    
+                    self.is_playing = True
+                    self.stream.write(chunk)
+                    
             except Exception as e:
                 print(f"[TTS] Playback Error: {e}")
             finally:
+                self.current_energy = 0.0 # Reset
                 self.audio_queue.task_done()
                 
-            # If queue is empty, we are done playing
-            # But wait, we loop immediately.
-            # We can toggle is_playing here optionally, 
-            # but is_active property covers queue check.
             pass
 
     def stop(self):
         """Clears the queue to stop playback immediately (Barge-In)."""
+        self.abort_event.set() # Stop synthesis AND playback loop
         with self.audio_queue.mutex:
             self.audio_queue.queue.clear()
+            
+    def reset(self):
+        """Call this before starting a new turn"""
+        self.abort_event.clear()
 
     def speak_stream(self, text_iterator):
         """
@@ -60,6 +83,7 @@ class Synthesizer:
         punctuation = {'.', '?', '!', '\n'}
         
         for text_chunk in text_iterator:
+            if self.abort_event.is_set(): return
             buffer += text_chunk
             if any(p in buffer for p in punctuation):
                 # Simple sentence split
@@ -67,7 +91,7 @@ class Synthesizer:
                 buffer = ""
                 self._synthesize_enqueue(to_speak)
         
-        if buffer.strip():
+        if buffer.strip() and not self.abort_event.is_set():
             self._synthesize_enqueue(buffer)
 
     def synthesize_text(self, text):
@@ -79,7 +103,11 @@ class Synthesizer:
         self._synthesize_enqueue(text)
 
     def _synthesize_enqueue(self, text):
+        if self.abort_event.is_set():
+             return
+
         try:
+            self.is_synthesizing = True # Start synthesis
             print(f"[TTS] Synthesizing: '{text}'")
             # Piper stream
             # The synthesize method returns a generator of audio chunks (raw PCM by default?)
@@ -93,6 +121,10 @@ class Synthesizer:
             stream = self.voice.synthesize(text)
             
             for audio_chunk in stream:
+                 if self.abort_event.is_set():
+                     print("[TTS] Aborted during synthesis loop")
+                     return
+
                  # Extract bytes from AudioChunk
                  # It seems to be a property or method based on dir() output
                  # audio_int16_bytes is likely what we want. 
@@ -103,12 +135,13 @@ class Synthesizer:
             print("[TTS] Audio enqueued")
         except Exception as e:
             print(f"TTS Error: {e}")
+        finally:
+            self.is_synthesizing = False # End synthesis
 
     @property
     def is_active(self):
         """
-        Returns True if audio is playing or queued.
-        This includes the time the queue is non-empty AND the time we are actually writing bytes to the stream.
+        Returns True if audio is playing, queued, OR being synthesized.
         """
         # We need a robust way to know if we are writing.
         # Check: Queue not empty OR (Queue empty but we haven't finished the current write?)
@@ -116,7 +149,7 @@ class Synthesizer:
         # But if the worker pops the last item, queue is empty, but it's still playing for X ms.
         # Ideally we use a lock or flag.
         # Let's use self.audio_queue.unfinished_tasks?
-        return self.audio_queue.unfinished_tasks > 0
+        return (self.audio_queue.unfinished_tasks > 0) or self.is_synthesizing
 
     def wait_until_done(self):
         self.audio_queue.join()

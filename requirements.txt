@@ -5,3 +5,5 @@ pyaudio
 numpy
 webrtcvad
 onnxruntime
+scipy
+noisereduce
