@@ -11,14 +11,23 @@ class Brain:
         genai.configure(api_key=api_key)
         
         # Use valid model name
-        # Use valid model name
-        self.model = genai.GenerativeModel('gemini-2.5-flash')
+        self.model = genai.GenerativeModel(
+            'gemini-2.5-flash',
+            # Optimize safety settings for speed
+            safety_settings={
+                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            }
+        )
         
         # Initialize chat history (manual list management)
         # We process history manually to avoid "response not iterated" errors on interruption
+        # Optimized system prompt: Concise, no formatting.
         self.history = [
-            {"role": "user", "parts": ["You are a helpful customer service voice bot. Keep your responses concise (1-2 sentences). Do not use markdown symbols like * or #. If interrupted, stop immediately."]},
-            {"role": "model", "parts": ["Understood. I will be concise and helpful."]}
+            {"role": "user", "parts": ["[IMPORTANT: You are in a voice call. Do not use lists. Do not use bolding. Keep answers under 15 words unless asked to elaborate.]"]},
+            {"role": "model", "parts": ["Understood. I will be concise."]}
         ]
 
     def generate_response_stream(self, text):

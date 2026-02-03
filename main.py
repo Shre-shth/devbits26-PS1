@@ -121,7 +121,15 @@ class VoiceBot:
         # Logic 7.2: "Spectral Subtraction" (Approximated via Bandpass)
         audio_int16 = self.audio_processor.process(audio_chunk)
         
-        # --- 2. Echo Gate (Logic 7.2) ---
+        # --- 2. VAD Logic (Run FIRST) ---
+        # vad() returns dict or None (or dict with prob key)
+        # Note: We pass the FILTERED audio to VAD for better accuracy
+        vad_event = self.vad(audio_int16)
+        prob = vad_event.get('prob', 0.0)
+        
+        # --- 3. Echo Gate (Logic 7.2) ---
+        is_barge_in_candidate = False
+        
         if self.state == CallState.SPEAKING:
             # Grace period check
             if (time.time() - self.last_state_change) * 1000 < self.STATE_TRANSITION_GRACE_MS:
@@ -133,26 +141,26 @@ class VoiceBot:
             output_energy = self.synthesizer.current_energy
             dynamic_threshold = max(self.ECHO_GATE_THRESHOLD, output_energy * 0.8) # 0.8 factor (Balanced)
             
-            if energy < dynamic_threshold:
+            # TRUST VAD: If Silero is 90% sure it's speech, ignore the energy gate
+            if prob > 0.9:
+                is_barge_in_candidate = True
+            elif energy > dynamic_threshold:
+                is_barge_in_candidate = True
+            else:
+                # It is quiet and VAD isn't sure. Discard.
                 # Still keep this commented to avoid spamming 100 lines/sec, but maybe print every N frames or if energy > 1000
                 if energy > 2000:
                     # Debug log only if there is *some* sound, to see why it's rejected
                     print(f"\r[Echo Gate] Ignored. Energy: {energy:.1f} < {dynamic_threshold:.1f} (Out: {output_energy:.1f})      ", end="", flush=True)
                 return
-            else:
-                print(f"\r[Echo Gate] OPEN! Energy: {energy:.1f} > {dynamic_threshold:.1f} (Out: {output_energy:.1f})      ", end="", flush=True)
 
-        # --- 3. VAD Logic ---
-        # vad() returns dict or None (or dict with prob key)
-        # Note: We pass the FILTERED audio to VAD for better accuracy
-        vad_event = self.vad(audio_int16)
-        prob = vad_event.get('prob', 0.0)
-
+        # --- 4. Main State Handling ---
         if self.state == CallState.LISTENING:
             self.handle_listening(audio_chunk, vad_event)
             
         elif self.state == CallState.SPEAKING or self.state == CallState.THINKING:
-            self.handle_barge_in(audio_chunk, prob)
+            if is_barge_in_candidate:
+                self.handle_barge_in(audio_chunk, prob)
 
     def handle_listening(self, audio_chunk, vad_event):
         # 1. Check EVENT: Start
@@ -190,16 +198,19 @@ class VoiceBot:
                 except Exception as e:
                     print(f"Barge-In Stop Error: {e}")
                 
-                # 2. Transition -> LISTENING
+                # 2. SAVE THE BUFFER BEFORE STATE CHANGE CLEARS IT
+                temp_audio_capture = self.pre_barge_buffer[:] 
+
+                # 3. Transition -> LISTENING (This clears self.pre_barge_buffer)
                 self.set_state(CallState.LISTENING)
                 
-                # 3. Capture this chunk!
-                # IMPORTANT: Flush the pre_barge_buffer which contains the "lost" start words
-                self.buffer.extend(self.pre_barge_buffer)
-                self.pre_barge_buffer = bytearray() # Clear
-                # self.buffer.extend(audio_chunk) # Covered by pre_buffer
+                # 4. RESTORE THE CAPTURED AUDIO
+                self.buffer.extend(temp_audio_capture)
+
+                # Clear pre-barge buffer explicitly (though set_state did it, good for safety)
+                self.pre_barge_buffer = bytearray() 
                 
-                # Force VAD trigger state so handle_listening continues recording
+                # 5. Force VAD trigger state so handle_listening continues recording
                 self.vad.triggered = True 
         else:
              # Reset if continuous speech breaks

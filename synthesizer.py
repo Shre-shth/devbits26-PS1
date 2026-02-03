@@ -31,7 +31,7 @@ class Synthesizer:
         self.abort_event = threading.Event()
 
     def _playback_worker(self):
-        CHUNK_SIZE = 1024 # Small chunk for responsive interruption
+        CHUNK_SIZE = 512 # Reduced for faster interrupt reaction
         
         while True:
             audio_data = self.audio_queue.get()
