@@ -26,7 +26,7 @@ class Brain:
         # We process history manually to avoid "response not iterated" errors on interruption
         # Optimized system prompt: Concise, no formatting.
         self.history = [
-            {"role": "user", "parts": ["[IMPORTANT: You are in a voice call. Do not use lists. Do not use bolding. Keep answers under 15 words unless asked to elaborate.]"]},
+            {"role": "user", "parts": ["[IMPORTANT: You are in a voice call. Do not use lists. Do not use bolding and do not use asterisks or other special characters. Keep answers under 15 words unless asked to elaborate.]"]},
             {"role": "model", "parts": ["Understood. I will be concise."]}
         ]
 

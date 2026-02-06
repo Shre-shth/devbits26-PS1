@@ -2,7 +2,7 @@ from faster_whisper import WhisperModel
 import numpy as np
 
 class Transcriber:
-    def __init__(self, model_size="small.en"):
+    def __init__(self, model_size="base.en"):
         device = "cpu"
         compute_type = "int8"
         

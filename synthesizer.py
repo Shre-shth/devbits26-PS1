@@ -127,7 +127,7 @@ class Synthesizer:
 
                  # Extract bytes from AudioChunk
                  # It seems to be a property or method based on dir() output
-                 # audio_int16_bytes is likely what we want. 
+                 # audio_int16_bytes is likely what we want.
                  # Let's try to access it as a property first based on commonly used dataclasses, 
                  # but since dir showed it, it exists.
                  data = audio_chunk.audio_int16_bytes
