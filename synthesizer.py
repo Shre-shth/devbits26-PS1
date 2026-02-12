@@ -4,151 +4,190 @@ import queue
 import threading
 import os
 import numpy as np
+import time
+import struct
+import socket
+import scipy.signal
+
 
 class Synthesizer:
-    def __init__(self, model_path="en_US-ryan-medium.onnx"):
+    def __init__(self, voicebot=None, model_path="en_US-ryan-medium.onnx"):
         if not os.path.exists(model_path):
-             raise FileNotFoundError(f"Piper model not found at {model_path}")
-             
+            raise FileNotFoundError(f"Piper model not found at {model_path}")
+
         self.voice = PiperVoice.load(model_path)
+        self.voicebot = voicebot
+
         self.audio_queue = queue.Queue()
         self.is_playing = False
-        self.current_energy = 0.0 # Exposed for Echo Gate
-        
-        # Output stream
+        self.current_energy = 0.0
+        self.is_synthesizing = False
+
+        # ================= RTP CONFIG =================
+        # Dynamic address from VoiceBot (set when packet is received)
+        self.asterisk_ip = None
+        self.asterisk_port = None
+
+        self.rtp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+        self.sequence = 0
+        self.timestamp = 0
+        self.ssrc = 12345
+        # ==============================================
+
+        # Local playback (for debugging)
         self.p = pyaudio.PyAudio()
         self.stream = self.p.open(
             format=pyaudio.paInt16,
             channels=1,
-            rate=22050, # Piper default
+            rate=22050,
             output=True
         )
-        
-        self.playback_thread = threading.Thread(target=self._playback_worker, daemon=True)
-        self.playback_thread.start()
-        
-        # Interruption Control
+
         self.abort_event = threading.Event()
 
+        self.playback_thread = threading.Thread(
+            target=self._playback_worker,
+            daemon=True
+        )
+        self.playback_thread.start()
+
+    # ==================================================
+    # RTP SEND FUNCTION
+    # ==================================================
+
+    def send_rtp(self, pcm_data):
+        # Convert to big-endian (Asterisk requires big-endian)
+        audio_np = np.frombuffer(pcm_data, dtype=np.int16)
+        be_audio = audio_np.byteswap().tobytes()
+
+        # RTP header (12 bytes)
+        rtp_header = struct.pack(
+            "!BBHII",
+            0x80,   # RTP version 2
+            10,     # Payload type 10 (L16)
+            self.sequence,
+            self.timestamp,
+            self.ssrc
+        )
+
+        packet = rtp_header + be_audio
+
+        try:
+            # USE THE BOUND SOCKET (Port 4000) from VoiceBot
+            # This ensures Symmetric RTP (Source Port 4000 -> Dest Port 4000)
+            if self.voicebot and hasattr(self.voicebot, 'remote_addr') and self.voicebot.remote_addr:
+                target_ip, target_port = self.voicebot.remote_addr
+                self.voicebot.rtp_socket.sendto(packet, (target_ip, target_port))
+            else:
+                 # Fallback (Should not happen in main app if connected)
+                 pass
+                 
+        except Exception as e:
+            print(f"[RTP] Send Error: {e}")
+
+        self.sequence = (self.sequence + 1) % 65536
+        self.timestamp += len(pcm_data) // 2
+    # ==================================================
+    # PLAYBACK WORKER (SENDS RTP FRAMES)
+    # ==================================================
+
     def _playback_worker(self):
-        CHUNK_SIZE = 512 # Reduced for faster interrupt reaction
-        
+        CHUNK_SIZE = 640  # 20ms @16kHz
+
         while True:
             audio_data = self.audio_queue.get()
+
             if audio_data is None:
                 self.audio_queue.task_done()
                 break
-            
+
             try:
-                # We split the large audio_data into small chunks to allow frequent abort checks
-                # play in chunks
                 for i in range(0, len(audio_data), CHUNK_SIZE):
                     if self.abort_event.is_set():
                         break
-                        
-                    chunk = audio_data[i:i+CHUNK_SIZE]
-                    
-                    # Calculate Energy (RMS) on the fly for the gate
+
+                    chunk = audio_data[i:i + CHUNK_SIZE]
+
+                    if len(chunk) < CHUNK_SIZE:
+                        break
+
+                    # Energy calculation (for echo gate)
                     audio_np = np.frombuffer(chunk, dtype=np.int16).astype(np.float32)
                     if len(audio_np) > 0:
-                         self.current_energy = np.sqrt(np.mean(audio_np**2))
-                    
+                        self.current_energy = np.sqrt(np.mean(audio_np ** 2))
+
                     self.is_playing = True
-                    self.stream.write(chunk)
-                    
+
+                    # 🔥 SEND TO ASTERISK
+                    self.send_rtp(chunk)
+
+                    # 20ms pacing
+                    time.sleep(0.02)
+
             except Exception as e:
                 print(f"[TTS] Playback Error: {e}")
             finally:
-                self.current_energy = 0.0 # Reset
+                self.current_energy = 0.0
                 self.audio_queue.task_done()
-                
-            pass
+
+    # ==================================================
+    # CONTROL FUNCTIONS
+    # ==================================================
 
     def stop(self):
-        """Clears the queue to stop playback immediately (Barge-In)."""
-        self.abort_event.set() # Stop synthesis AND playback loop
+        self.abort_event.set()
         with self.audio_queue.mutex:
             self.audio_queue.queue.clear()
-            
+
     def reset(self):
-        """Call this before starting a new turn"""
         self.abort_event.clear()
 
-    def speak_stream(self, text_iterator):
-        """
-        Consumes text iterator, synthesizes, and plays.
-        """
-        self.is_playing = True
-        buffer = ""
-        punctuation = {'.', '?', '!', '\n'}
-        
-        for text_chunk in text_iterator:
-            if self.abort_event.is_set(): return
-            buffer += text_chunk
-            if any(p in buffer for p in punctuation):
-                # Simple sentence split
-                to_speak = buffer
-                buffer = ""
-                self._synthesize_enqueue(to_speak)
-        
-        if buffer.strip() and not self.abort_event.is_set():
-            self._synthesize_enqueue(buffer)
+    # ==================================================
+    # TTS ENTRY POINT
+    # ==================================================
 
     def synthesize_text(self, text):
-        """
-        Synthesizes a single text chunk and adds to audio queue.
-        Useful for push-based streaming (Gemini -> Buffer -> Piper).
-        """
         self.is_playing = True
         self._synthesize_enqueue(text)
 
     def _synthesize_enqueue(self, text):
         if self.abort_event.is_set():
-             return
+            return
 
         try:
-            self.is_synthesizing = True # Start synthesis
+            self.is_synthesizing = True
             print(f"[TTS] Synthesizing: '{text}'")
-            # Piper stream
-            # The synthesize method returns a generator of audio chunks (raw PCM by default?)
-            # We need to pass a speaker_id if multi-speaker, or 0/None.
-            # From usage: synthesize(text, speaker_id=0, length_scale=1.0, ...)
-            # Let's try passing just text and an empty speaker_id which seems to be required by older bindings or simple 0.
-            
-            # Note: The test script used list() as second arg? 
-            # Let's try standard usage: stream = self.voice.synthesize(text)
-            
-            stream = self.voice.synthesize(text)
-            
-            for audio_chunk in stream:
-                 if self.abort_event.is_set():
-                     print("[TTS] Aborted during synthesis loop")
-                     return
 
-                 # Extract bytes from AudioChunk
-                 # It seems to be a property or method based on dir() output
-                 # audio_int16_bytes is likely what we want.
-                 # Let's try to access it as a property first based on commonly used dataclasses, 
-                 # but since dir showed it, it exists.
-                 data = audio_chunk.audio_int16_bytes
-                 self.audio_queue.put(data)
+            stream = self.voice.synthesize(text)
+
+            for audio_chunk in stream:
+                if self.abort_event.is_set():
+                    return
+
+                audio_bytes = audio_chunk.audio_int16_bytes
+                audio_np = np.frombuffer(audio_bytes, dtype=np.int16)
+
+                if len(audio_np) > 0:
+                    # 🔥 RESAMPLE 22050 → 16000
+                    resampled = scipy.signal.resample_poly(audio_np, 16000, 22050)
+                    pcm_bytes = resampled.astype(np.int16).tobytes()
+
+                    self.audio_queue.put(pcm_bytes)
+
             print("[TTS] Audio enqueued")
+
         except Exception as e:
             print(f"TTS Error: {e}")
         finally:
-            self.is_synthesizing = False # End synthesis
+            self.is_synthesizing = False
+
+    # ==================================================
+    # STATUS HELPERS
+    # ==================================================
 
     @property
     def is_active(self):
-        """
-        Returns True if audio is playing, queued, OR being synthesized.
-        """
-        # We need a robust way to know if we are writing.
-        # Check: Queue not empty OR (Queue empty but we haven't finished the current write?)
-        # For simplicity, let's rely on queue size.
-        # But if the worker pops the last item, queue is empty, but it's still playing for X ms.
-        # Ideally we use a lock or flag.
-        # Let's use self.audio_queue.unfinished_tasks?
         return (self.audio_queue.unfinished_tasks > 0) or self.is_synthesizing
 
     def wait_until_done(self):

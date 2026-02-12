@@ -13,7 +13,9 @@ import scipy.signal
 from vad import VADIterator
 from transcriber import Transcriber
 from brain import Brain
+from brain import Brain
 from synthesizer import Synthesizer
+import socket
 
 # Constants
 RATE = 16000
@@ -61,7 +63,7 @@ class VoiceBot:
         self.vad = VADIterator(threshold=0.5, min_silence_duration_ms=500)
         self.transcriber = Transcriber()
         self.brain = Brain(API_KEY)
-        self.synthesizer = Synthesizer()
+        self.synthesizer = Synthesizer(self)
         self.audio_processor = AudioPreprocessor(RATE)
         
         self.state = CallState.LISTENING
@@ -74,14 +76,16 @@ class VoiceBot:
         self.pre_barge_buffer = bytearray() # Buffer to hold chunks while confirming barge-in
         
         # Audio I/O
-        self.p = pyaudio.PyAudio()
-        self.recorder = self.p.open(
-            format=FORMAT,
-            channels=1,
-            rate=RATE,
-            input=True,
-            frames_per_buffer=CHUNK_SIZE
-        )
+        # RTP Socket (from Asterisk ExternalMedia)
+        # import socket # Already imported at top
+
+        self.rtp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.rtp_socket.bind(("0.0.0.0", 4000))
+        # self.rtp_socket.setblocking(False) # Don't set non-blocking yet, wait for handshake first
+
+        self.remote_addr = None
+        self.rtp_seq = 0
+        self.rtp_timestamp = 0
         
         # --- Logic 7.2: Server-Side Gating ---
         # "If CallState == SPEAKING, ignore... energy < threshold"
@@ -90,16 +94,79 @@ class VoiceBot:
         # New: 10000 (Still high to block echo, but filtered audio is cleaner)
         self.ECHO_GATE_THRESHOLD = 10000 
         self.STATE_TRANSITION_GRACE_MS = 1000
+        
+        # Termination Flag
+        self.should_terminate = False
 
     def run(self):
-        print("\n--- Low Latency Voice Bot Started ---")
+        print("\n--- Real Estate Voice Bot Started (RTP Mode) ---")
+        print(f"Listening on UDP port 4000...")
         print(f"State: {self.state.name}")
+        
+        # 1. Wait for connection (first packet) to get remote address
+        print(f"Listening on UDP port 4000...")
+        print("Waiting for incoming RTP packet to establish address...")
+        
+        # Simple Blocking Wait (Proven to work)
+        try:
+             packet, addr = self.rtp_socket.recvfrom(2048)
+             self.remote_addr = addr
+             print(f"Connection established from {addr}")
+        except KeyboardInterrupt:
+             print("Stopping...")
+             return
+        except Exception as e:
+             print(f"Socket error: {e}")
+             return
+
+        # Switch to non-blocking for main loop
+        self.rtp_socket.setblocking(False)
+
+        # Allow time for user to put phone to ear or for audio path to stabilize
+        print("Connection established. Waiting 2 seconds before greeting...")
+        time.sleep(2)
+        
+        # --- Initial Greeting ---
+        # DEFINED AND PRINTED HERE NOW (After connection)
+        greeting_text = "Hello! Welcome to Shreshth Enterprises. How can I assist you today?"
+        print(f"Bot (Greeting): {greeting_text}")
+        
+        # 2. Speak greeting
+        self.synthesizer.synthesize_text(greeting_text)
+        
+        # 3. Add to history so Brain knows it spoke
+        self.brain.history.append({"role": "model", "parts": [greeting_text]})
+        
+        # 4. Set state to SPEAKING so Echo Gate is active immediately
+        self.set_state(CallState.SPEAKING)
         
         try:
             while True:
-                # 1. Read Audio
+                # Check for termination condition
+                if self.should_terminate and self.state == CallState.LISTENING and not self.synthesizer.is_active:
+                     print("\n[Call Ended] Generating Minutes of Meeting...")
+                     mom = self.brain.generate_mom()
+                     with open("minutes_of_meeting.txt", "w") as f:
+                         f.write(mom)
+                     print("Minutes of Meeting saved to 'minutes_of_meeting.txt'.")
+                     break
+
+                # 1. Read Audio (RTP)
                 try:
-                    audio_chunk = self.recorder.read(CHUNK_SIZE, exception_on_overflow=False)
+                    packet, addr = self.rtp_socket.recvfrom(2048)
+                    self.remote_addr = addr  # Store remote address for reply
+                    raw_rtp_audio = packet[12:]  # Strip RTP header
+                    
+                    # RTP L16 is Big-Endian (>i2). We need Little-Endian (<i2) for processing.
+                    # Convert BE bytes -> LE bytes
+                    # NOTE: If Asterisk sends 118 (L16), it is Big-Endian by definition.
+                    if len(raw_rtp_audio) > 0:
+                        audio_chunk = np.frombuffer(raw_rtp_audio, dtype='>i2').astype('<i2').tobytes()
+                    else:
+                        continue
+                    
+                except BlockingIOError:
+                    continue
                 except IOError as e:
                     print(f"Audio Error: {e}")
                     continue
@@ -141,10 +208,9 @@ class VoiceBot:
             output_energy = self.synthesizer.current_energy
             dynamic_threshold = max(self.ECHO_GATE_THRESHOLD, output_energy * 0.8) # 0.8 factor (Balanced)
             
-            # TRUST VAD: If Silero is 90% sure it's speech, ignore the energy gate
-            if prob > 0.9:
-                is_barge_in_candidate = True
-            elif energy > dynamic_threshold:
+            # Strict Gate: Input energy MUST exceed dynamic threshold (physics check)
+            # We removed the "VAD > 0.9" bypass because it caused self-listening loops.
+            if energy > dynamic_threshold:
                 is_barge_in_candidate = True
             else:
                 # It is quiet and VAD isn't sure. Discard.
@@ -262,6 +328,13 @@ class VoiceBot:
                      print("[Generation] Cancelled (State is LISTENING)")
                      return
 
+                # Check for Hangup Token
+                if "[HANGUP]" in chunk:
+                    self.should_terminate = True
+                    chunk = chunk.replace("[HANGUP]", "")
+                    if not chunk.strip():
+                        continue
+
                 sentence_buffer += chunk
                 parts = re.split(split_pattern, sentence_buffer)
                 
@@ -300,10 +373,6 @@ class VoiceBot:
 
     def shutdown(self):
         try:
-            if self.recorder.is_active():
-                self.recorder.stop_stream()
-            self.recorder.close()
-            self.p.terminate()
             self.synthesizer.close()
         except:
             pass

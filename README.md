@@ -24,11 +24,14 @@ graph TD
 ```
 
 ## Tech Stack
-*   **Faster-Whisper**: High-performance speech-to-text models (CTranslate2 backend).
-*   **Google Gemini (via LangChain)**: Advanced LLM for understanding context and generating responses.
-*   **Piper TTS**: Fast, local neural text-to-speech running on ONNX Runtime.
-*   **Silero VAD**: Enterprise-grade Voice Activity Detection for precise turn-taking.
-*   **PyAudio & NumPy/SciPy**: Real-time audio I/O and signal processing (spectral filtering).
+
+| Component | Technology | Purpose |
+| :--- | :--- | :--- |
+| **Speech-to-Text (STT)** | **Faster-Whisper** | Transcribes user speech audio to text. |
+| **LLM (Brain)** | **Google Gemini** | Generates intelligent text responses. |
+| **Text-to-Speech (TTS)** | **Piper TTS** | Converts text response back to audio. |
+| **VAD** | **Silero VAD** | Detects voice activity to handle barge-ins. |
+| **Audio I/O** | **PyAudio** | Captures microphone input and plays audio. |
 
 ## Setup Instructions
 

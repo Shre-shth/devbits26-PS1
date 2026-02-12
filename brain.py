@@ -12,7 +12,7 @@ class Brain:
         
         # Use valid model name
         self.model = genai.GenerativeModel(
-            'gemini-2.5-flash',
+            'gemini-3-flash-preview',
             # Optimize safety settings for speed
             safety_settings={
                 HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
@@ -24,11 +24,57 @@ class Brain:
         
         # Initialize chat history (manual list management)
         # We process history manually to avoid "response not iterated" errors on interruption
-        # Optimized system prompt: Concise, no formatting.
+        # System Prompt for SHRESHTH ENTERPRISES
+        system_instruction = """
+You are an intelligent sales agent for SHRESHTH ENTERPRISES, a premium real estate firm.
+Your goal is to have a natural, engaging conversation to understand the user's needs and build a profile.
+Do NOT just read a script. Adapt to the user's responses.
+
+**Your Objective: Build a User Profile**
+Naturally ask questions during the conversation to gather:
+1. Current Location (Where do they stay?)
+2. Requirement (e.g., 3BHK, 4BHK, Villa, Plot)
+3. Budget
+4. Timeline (When do they plan to move?)
+
+**Contextual Logic:**
+- If the user is calling from the NCR (National Capital Region), suggest properties in Noida or Gurgaon.
+- If the user asks for a specific type (e.g., "Villa"), do NOT pitch other types (e.g., Apartments) unless asked.
+- tailoring your recommendations based on their location and preferences.
+
+**Closing Protocol:**
+- If the user indicates they are done (e.g., "That's all", "Bye"), ask: "Is there anything else I can assist you with?"
+- If they say "No":
+  1. Say a professional goodbye.
+  2. Append the token `[HANGUP]` at the very end of your response.
+
+**Voice Call Constraints (CRITICAL):**
+- You are speaking on a voice call.
+- Keep responses CONCISE (1-2 sentences) to maintain a natural pace.
+- DO NOT use list formatting (1., 2., -), bolding (**), or special characters.
+- Speak naturally and professionally.
+"""
         self.history = [
-            {"role": "user", "parts": ["[IMPORTANT: You are in a voice call. Do not use lists. Do not use bolding and do not use asterisks or other special characters. Keep answers under 15 words unless asked to elaborate.]"]},
-            {"role": "model", "parts": ["Understood. I will be concise."]}
+            {"role": "user", "parts": [system_instruction]},
+            {"role": "model", "parts": ["Understood. I am ready to act as the sales agent for SHRESHTH ENTERPRISES."]}
         ]
+
+    def generate_mom(self):
+        """
+        Generates a minutes of the meeting based on the history.
+        """
+        print("[Brain] Generating Minutes of Meeting...")
+        prompt = "Generate a concise Minutes of the Meeting (MoM) for this conversation. Use pointwise format. Highlight requirements, budget, and location."
+        
+        try:
+            # We use a temporary history for this one-off request
+            temp_history = self.history.copy()
+            temp_history.append({"role": "user", "parts": [prompt]})
+            
+            response = self.model.generate_content(temp_history)
+            return response.text
+        except Exception as e:
+            return f"Error generating MoM: {e}"
 
     def generate_response_stream(self, text):
         """
