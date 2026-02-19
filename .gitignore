@@ -1,0 +1,19 @@
+# Deny all by default
+*
+
+# Whitelist (Keep these files tracked)
+!README.md
+!requirements.txt
+!src/
+!src/**
+!.gitignore
+
+# Explicitly ignore highly sensitive/bulky files (redundant but safe)
+.env
+.venv/
+__pycache__/
+*.pyc
+*.onnx
+*.onnx.json
+*.wav
+*.txt
