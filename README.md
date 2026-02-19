@@ -24,10 +24,10 @@ graph TD
     Asterisk <-->|WebSocket data stream| Bot[🛸 Voice Bot Core]
     
     subgraph "The AI Nebula"
-        Bot -->|Audio Waveform| VAD[🔈 Silero VAD (Sensor)]
-        VAD -->|Signal Segment| STT[📝 Faster-Whisper (Decoder)]
-        STT -->|Text Data| Brain[🧠 Gemini Flash (Intelligence)]
-        Brain -->|Response Stream| TTS[🗣️ Piper TTS (Synthesizer)]
+        Bot -->|Audio Waveform| VAD["🔈 Silero VAD (Sensor)"]
+        VAD -->|Signal Segment| STT["📝 Faster-Whisper (Decoder)"]
+        STT -->|Text Data| Brain["🧠 Gemini Flash (Intelligence)"]
+        Brain -->|Response Stream| TTS["🗣️ Piper TTS (Synthesizer)"]
         TTS -->|Audio Waveform| Bot
     end
 ```
