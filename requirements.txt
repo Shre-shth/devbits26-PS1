@@ -1,0 +1,18 @@
+# STT and VAD
+faster-whisper
+onnxruntime
+
+# TTS and Audio Processing
+piper-tts
+scipy
+
+#for LLM and MOM 
+google-generativeai
+
+#ARI Connectivity
+requests
+websocket-client
+
+# python utilities 
+numpy
+python-dotenv
