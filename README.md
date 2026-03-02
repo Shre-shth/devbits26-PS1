@@ -1,20 +1,137 @@
-# 🌌 Real-Time AI Voice Agent: Project Starfire 🚀
+# Real-Time AI Voice Agent: Project DEVBITS 
+> **Team : [Shreshth Vishwakarma](https://github.com/Shre-shth) and [Shreshtha Shandilya](https://github.com/ShreshthaMax)
 
-> **"Connecting Intelligence at the Speed of Sound"**
+This project implements a sophisticated Voice Bot that integrates with Asterisk via the Asterisk REST Interface (ARI). It uses `faster-whisper` for Speech-to-Text (STT), `Piper` for Text-to-Speech (TTS), and Google's Gemini API for intelligent conversation and generating Minutes of Meeting (MOM).
 
-### 👨‍🚀 Mission Control: **HindKeSitarey**
+## Features
 
----
+- **Real-time Transcription**: Uses `faster-whisper` for low-latency, high-accuracy STT.
+- **Natural-sounding Speech**: Utilizes `Piper` TTS with various voice models for high-quality audio output.
+- **Intelligent Conversations**: Powered by Google Generative AI (Gemini).
+- **Voice Activity Detection (VAD)**: Efficiently detects speech using the Silero VAD model. Removes coughs and sneezes and does not detect them as speech.
+- **Barge-in Support**: Allows users to interrupt the bot while it's speaking.
+- **Outbound Calling**: Capability to initiate calls directly from the bot.
+- **Automatic MOM Generation**: Summarizes conversations into professional Minutes of Meeting after the call ends.
 
-## � Mission Brief
+## Prerequisites
 
-Welcome to a next-generation **Low-Latency Voice AI** system. Like a satellite relay, this agent captures your voice, beams it to a powerful LLM core, and synthesizes a human-like response in real-time. It integrates state-of-the-art speech recognition, generative intelligence, and high-fidelity synthesis into a cohesive orbital system.
+- **Python**: 3.12 or higher.
+- **Asterisk**: Installed and configured with ARI enabled (look for the files in [asterisk conf](https://github.com/Shre-shth/devbits26-PS1/tree/main/asterisk%20conf)).
+- **NVIDIA GPU (Optional but Recommended)**: For accelerated STT and TTS performance.
+- **NVIDIA Libraries**: Ensure `cublas` and `cudnn` are accessible if using GPU.
 
-The agent docks efficiently with **Asterisk PBX**, allowing seamless two-way communication via standard telephony protocols.
+## Setup Instructions
 
----
+### 1. Clone the Repository
 
-## 🛰️ System Constellation (Architecture)
+```bash
+git clone https://github.com/Shre-shth/devbits26-PS1.git
+cd devbits26-PS1
+```
+
+### 2. Create and Activate Virtual Environment
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+### 3. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4.  Download Models
+Acquire the neural network weights required for onboard processing.
+
+```bash
+# VAD Sensor
+wget -O silero_vad.onnx https://github.com/snakers4/silero-vad/raw/master/files/silero_vad.onnx
+
+# Voice Synthesis Module (Amy Low, we used Amy you can try others from [this repo](https://github.com/rhasspy/piper/blob/master/VOICES.md))
+wget -O en_US-amy-low.onnx "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/amy/low/en_US-amy-low.onnx?download=true"
+wget -O en_US-amy-low.onnx.json "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/amy/low/en_US-amy-low.onnx.json?download=true"
+```
+
+### 5. Asterisk setup
+**CRITICAL:** The Asterisk Gateway must be operational.
+
+1.  **Deploy Asterisk**: Install following [official guides](https://wiki.asterisk.org/wiki/display/AST/Installing+Asterisk+From+Source).
+2.  **Configure ARI (`/etc/asterisk/ari.conf`)**:
+    ```ini
+    [general]
+    enabled = yes
+    pretty = yes
+    allowed_origins = *
+
+    [brain]
+    type = user
+    read_only = no
+    password = 1234
+    password_format = plain
+    ```
+3.  **Establish Path (`/etc/asterisk/extensions.conf`)**:
+    ```ini
+    [default]
+    exten => 1000,1,NoOp(Route to AI Core)
+     same => n,Stasis(ai-bot)
+     same => n,Hangup()
+    ```
+4. Similarly follow [asterisk conf] for all other conf files.
+5. **Reboot Systems**: `sudo systemctl restart asterisk`
+
+
+### 6  Configurations
+
+Create a `.env` file in the root directory (use the provided example if available) and add your Google API key:
+
+```env
+GOOGLE_API_KEY=your_google_api_key_here
+# Optional: Path to specific Piper voice model
+VOICE_MODEL=en_US-amy-low.onnx
+```
+
+### 7  Run the application
+
+You can use the provided helper script to run the bot with the necessary environment variables set:
+
+```bash
+./run.sh
+```
+
+Alternatively, run directly with Python:
+
+```bash
+cd src
+python main.py
+```
+
+## Project Structure
+
+- `src/`: Core logic of the application.
+    - `main.py`: Entry point of the bot.
+    - `voice_bot.py`: Main bot logic and state management.
+    - `ari_controller.py`: Handles communication with Asterisk ARI.
+    - `transcriber.py`: STT implementation using `faster-whisper`.
+    - `synthesizer.py`: TTS implementation using `Piper`.
+    - `brain.py`: LLM integration and MOM generation logic.
+    - `vad.py`: Voice Activity Detection logic.
+    - `config.py`: Centralized configuration management.
+    - `utils.py`: General utility functions.
+- `en_US-*.onnx`: Pre-downloaded Piper voice models.
+- `silero_vad.onnx`: Silero VAD model.
+- `requirements.txt`: Python dependencies.
+- `run.sh`: Shell script for running the bot.
+
+## Usage
+
+Once the bot is running, it will listen for incoming calls on the configured ARI endpoint. 
+
+- To initiate an **outbound call** manually, type `call` in the terminal when prompted.
+- The bot will generate a `minutes_of_meeting.txt` file in the `src/` directory after each call session ends.
+
+## Architecture
 
 Our architecture is designed for speed and stability, ensuring minimal signal decay (latency) across the pipeline.
 
@@ -32,135 +149,7 @@ graph TD
     end
 ```
 
----
+## Troubleshooting
 
-## ⚛️ Propulsion Systems (Tech Stack)
-
-Powered by a fusion of high-performance technologies.
-
-| Module | Component | Function |
-| :--- | :--- | :--- |
-| **Gateway** | **Asterisk 16+** | The docking station for all incoming SIP/VoIP calls. |
-| **Protocol** | **ARI (Asterisk REST Interface)** | Command & Control link between the PBX and Python Core. |
-| **Decoder** | **Faster-Whisper** | Hyper-fast transcription engine. |
-| **Core Intelligence** | **Google Gemini Flash** | The central brain processing context and generating responses. |
-| **Synthesizer** | **Piper TTS** | Low-latency text-to-speech engine. |
-| **Sensors** | **Silero VAD** | Voice Activity Detection to handle user interruptions. |
-
----
-
-## 🚀 Launch Sequence (Setup)
-
-Prepare your ground station (Linux Machine) for deployment.
-
-### 1. 🛠️ Ground Support Equipment (Prerequisites)
-Install the necessary system-level libraries for audio processing and build tools.
-
-```bash
-sudo apt-get update
-sudo apt-get install -y python3-dev portaudio19-dev build-essential ffmpeg git
-```
-
-### 2. 📡 Telemetry Uplink (Asterisk Setup)
-**CRITICAL:** The Asterisk Gateway must be operational.
-
-1.  **Deploy Asterisk**: Install following [official guides](https://wiki.asterisk.org/wiki/display/AST/Installing+Asterisk+From+Source).
-2.  **Configure ARI (`/etc/asterisk/ari.conf`)**:
-    ```ini
-    [general]
-    enabled = yes
-    pretty = yes
-    allowed_origins = *
-
-    [brain]
-    type = user
-    read_only = no
-    password = 1234
-    password_format = plain
-    ```
-3.  **Establish Flight Path (`/etc/asterisk/extensions.conf`)**:
-    ```ini
-    [default]
-    exten => 1000,1,NoOp(Route to AI Core)
-     same => n,Stasis(ai-bot)
-     same => n,Hangup()
-    ```
-4.  **Reboot Systems**: `sudo systemctl restart asterisk`
-
-### 3. 💾 Initialize Repository
-```bash
-git clone https://github.com/Shre-shth/devbits26-PS1.git
-cd devbits26-PS1
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-### 4. 🔑 Encryption Keys (.config)
-Create your environmental config.
-```bash
-cp .env.example .env
-```
-Populate `.env` with your **Google Gemini API Key**:
-```ini
-GOOGLE_API_KEY=AIzaSy...
-```
-
-### 5. 📦 Download Payload (Models)
-Acquire the neural network weights required for onboard processing.
-
-```bash
-# VAD Sensor
-wget -O silero_vad.onnx https://github.com/snakers4/silero-vad/raw/master/files/silero_vad.onnx
-
-# Voice Synthesis Module (Amy Low)
-wget -O en_US-amy-low.onnx "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/amy/low/en_US-amy-low.onnx?download=true"
-wget -O en_US-amy-low.onnx.json "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/amy/low/en_US-amy-low.onnx.json?download=true"
-```
-
----
-
-## 🚦 Ignition (Running the Bot)
-
-Ensure all systems are nominal before starting the main engine.
-
-### Option A: Auto-Launch (Recommended)
-Automatically configures the NVIDIA/CUDA trajectory if GPU is detected.
-
-```bash
-chmod +x run.sh
-./run.sh
-```
-
-### Option B: Manual Override
-```bash
-source .venv/bin/activate
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(pwd)/.venv/lib/python3.12/site-packages/nvidia/cublas/lib:$(pwd)/.venv/lib/python3.12/site-packages/nvidia/cudnn/lib
-python main.py
-```
-
-**Expected Telemetry:**
-- `[ARI] Connected to ARI.` ✅
-- `Listening on 127.0.0.1:4000...` ✅
-
----
-
-## 🎧 Communication Protocols (Usage)
-
-1.  **Inbound Hail**: Register your SIP Softphone (Zoiper/MicroSIP) to the Asterisk Server. Dial Coordinates **1000**.
-2.  **Outbound Hail**: Trigger the bot to initiate contact (requires `trigger_outbound.py` execution).
-
----
-
-## ⚠️ Anomaly Detection (Troubleshooting)
-
-| Alert | Diagnosis | Corrective Action |
-| :--- | :--- | :--- |
-| **ModuleNotFoundError** | Missing Modules | `pip install -r requirements.txt` |
-| **Connection Refused** | Gateway Offline | Check `sudo asterisk -rvvv`. Verify `ari.conf` credentials. |
-| **No Audio** | Signal Jamming (NAT/Firewall) | Check UDP ports 10000-20000 (RTP) and 4000. |
-| **Bad Magic Number** | Codec Mismatch | Ensure Asterisk uses `ulaw` or `alaw`. |
-
----
-
-**Crafted across the stars by Team HindKeSitarey 🌟**
+- **Library Not Found Errors**: If you encounter issues with `libcublas` or `libcudnn`, ensure your `LD_LIBRARY_PATH` is correctly set (the `run.sh` script attempts to do this automatically).
+- **API Key Issues**: Verify that your `GOOGLE_API_KEY` is valid and has sufficient quota for Gemini API.
