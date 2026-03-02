@@ -103,7 +103,7 @@ VOICE_MODEL=en_US-amy-low.onnx
 
 ### 7  Run the application
 
-Ensure that asterisks is properly setup and Zoiper(telephony) is connected. 
+Ensure that asterisks is properly setup and Zoiper(softphone) is connected. 
 
 Run directly with Python:
 
@@ -115,7 +115,7 @@ And then for inbound calling :
 ```bash
 DIAL: 555 on Zoiper (or choose your own number)
 ```
-for outbound calling type : (please ensure that outbound calling is hardcoded for a particular user, you can change the system prompt as per your usecase)
+for outbound calling, type : (please ensure that outbound calling is hardcoded for a particular user, you can change the system prompt as per your usecase)
 ```bash
 call
 ```
