@@ -4,7 +4,10 @@
 This project implements a sophisticated Voice Bot for an enterprise named 'SHRESHTH ENTERPRISES' that integrates with Asterisk via the Asterisk REST Interface (ARI). It uses `faster-whisper` for Speech-to-Text (STT), `Piper` for Text-to-Speech (TTS), and Google's Gemini API for intelligent conversation and generating Minutes of Meeting (MOM).
 
 ## Demo Video
-<>
+
+https://github.com/user-attachments/assets/dbc0990e-7626-46ed-ab5b-7bace621d855
+
+
 It does not capture soft sneezes and coughs, just captures true speech.    
 Automatic MOM generation after the call ends **([which is not shown in the video](https://github.com/Shre-shth/devbits26-PS1/blob/main/sample_MOM.md)).**
 
