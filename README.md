@@ -159,6 +159,15 @@ graph TD
         STT -->|Text Data| Brain["🧠 Gemini Flash (Intelligence)"]
         Brain -->|Response Stream| TTS["🗣️ Piper TTS (Synthesizer)"]
         TTS -->|Audio Waveform| Bot
+        
+        %% MOM Logic
+        STT -.->|Append Text| Logger[(📑 Black Box Logs)]
+        Brain -.->|Append Text| Logger
+        
+        Bot -- "🛰️ Call Disconnect" --> Debrief[📝 MOM Generator]
+        Logger -->|Full Conversation| Debrief
+        Debrief -->|Final Analysis| Brain
+        Brain -->|MOM Data| File[💾 minutes_of_meeting.txt]
     end
 ```
 For more details and high level architecture, check [documentation](https://github.com/Shre-shth/devbits26-PS1/blob/main/documentation.pdf).
