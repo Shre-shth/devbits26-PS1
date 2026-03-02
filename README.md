@@ -1,7 +1,12 @@
-# Real-Time AI Voice Agent: Project DEVBITS 
-> **Team : [Shreshth Vishwakarma](https://github.com/Shre-shth) and [Shreshtha Shandilya](https://github.com/ShreshthaMax)
+# 🌌Real-Time AI Voice Agent: Project DEVBITS 
+> **Team : [Shreshth Vishwakarma👦](https://github.com/Shre-shth) and [Shreshtha Shandilya👦](https://github.com/ShreshthaMax) **
 
-This project implements a sophisticated Voice Bot that integrates with Asterisk via the Asterisk REST Interface (ARI). It uses `faster-whisper` for Speech-to-Text (STT), `Piper` for Text-to-Speech (TTS), and Google's Gemini API for intelligent conversation and generating Minutes of Meeting (MOM).
+This project implements a sophisticated Voice Bot for an enterprise named 'SHRESHTH ENTERPRISES' that integrates with Asterisk via the Asterisk REST Interface (ARI). It uses `faster-whisper` for Speech-to-Text (STT), `Piper` for Text-to-Speech (TTS), and Google's Gemini API for intelligent conversation and generating Minutes of Meeting (MOM).
+
+## Demo Video
+<>
+**It does not capture soft sneezes and coughs, just captures true speech. 
+Automatic MOM generation after the call ends (which is not shown in the video).**
 
 ## Features
 
@@ -94,13 +99,7 @@ VOICE_MODEL=en_US-amy-low.onnx
 
 ### 7  Run the application
 
-You can use the provided helper script to run the bot with the necessary environment variables set:
-
-```bash
-./run.sh
-```
-
-Alternatively, run directly with Python:
+Run directly with Python:
 
 ```bash
 cd src
@@ -131,7 +130,7 @@ Once the bot is running, it will listen for incoming calls on the configured ARI
 - To initiate an **outbound call** manually, type `call` in the terminal when prompted.
 - The bot will generate a `minutes_of_meeting.txt` file in the `src/` directory after each call session ends.
 
-## Architecture
+## 🛰️Architecture
 
 Our architecture is designed for speed and stability, ensuring minimal signal decay (latency) across the pipeline.
 
@@ -148,8 +147,12 @@ graph TD
         TTS -->|Audio Waveform| Bot
     end
 ```
+For more details and high level architecture, check [documentation](https://github.com/Shre-shth/devbits26-PS1/blob/main/documentation.pdf).
 
 ## Troubleshooting
 
 - **Library Not Found Errors**: If you encounter issues with `libcublas` or `libcudnn`, ensure your `LD_LIBRARY_PATH` is correctly set (the `run.sh` script attempts to do this automatically).
 - **API Key Issues**: Verify that your `GOOGLE_API_KEY` is valid and has sufficient quota for Gemini API.
+
+
+>**Crafted with love by Team HindKeSitare**
