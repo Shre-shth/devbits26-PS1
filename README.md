@@ -5,8 +5,8 @@ This project implements a sophisticated Voice Bot for an enterprise named 'SHRES
 
 ## Demo Video
 <>
-It does not capture soft sneezes and coughs, just captures true speech. 
-Automatic MOM generation after the call ends **(which is not shown in the video).**
+It does not capture soft sneezes and coughs, just captures true speech.    
+Automatic MOM generation after the call ends **([which is not shown in the video](https://github.com/Shre-shth/devbits26-PS1/blob/main/sample_MOM.md)).**
 
 ## Features
 
