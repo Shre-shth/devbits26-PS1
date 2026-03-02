@@ -9,7 +9,8 @@ https://github.com/user-attachments/assets/dbc0990e-7626-46ed-ab5b-7bace621d855
 
 
 It does not capture sneezes and coughs, just captures true speech (shown in video).    
-Automatic MOM generation after the call ends **([which is not shown in the video](https://github.com/Shre-shth/devbits26-PS1/blob/main/sample_MOM.md)).**
+Automatic MOM generation after the call ends **([which is not shown in the video](https://github.com/Shre-shth/devbits26-PS1/blob/main/sample_MOM.md)).**        
+Maintains context and does not go out when something different is asked (shown in video).
 
 ## Features
 
