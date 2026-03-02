@@ -86,7 +86,7 @@ wget -O en_US-amy-low.onnx.json "https://huggingface.co/rhasspy/piper-voices/res
      same => n,Stasis(ai-bot)
      same => n,Hangup()
     ```
-4. Similarly follow [asterisk conf] for all other conf files.
+4. Similarly follow [asterisk conf](https://github.com/Shre-shth/devbits26-PS1/tree/main/asterisk%20conf) for all other conf files.
 5. **Reboot Systems**: `sudo systemctl restart asterisk`
 
 
