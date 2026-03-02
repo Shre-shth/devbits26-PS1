@@ -1,12 +1,12 @@
 # 🌌Real-Time AI Voice Agent: Project DEVBITS 
-> **Team : [Shreshth Vishwakarma👦](https://github.com/Shre-shth) and [Shreshtha Shandilya👦](https://github.com/ShreshthaMax) **
+> Team : [Shreshth Vishwakarma👦](https://github.com/Shre-shth) and [Shreshtha Shandilya👦](https://github.com/ShreshthaMax) 
 
 This project implements a sophisticated Voice Bot for an enterprise named 'SHRESHTH ENTERPRISES' that integrates with Asterisk via the Asterisk REST Interface (ARI). It uses `faster-whisper` for Speech-to-Text (STT), `Piper` for Text-to-Speech (TTS), and Google's Gemini API for intelligent conversation and generating Minutes of Meeting (MOM).
 
 ## Demo Video
 <>
-**It does not capture soft sneezes and coughs, just captures true speech. 
-Automatic MOM generation after the call ends (which is not shown in the video).**
+It does not capture soft sneezes and coughs, just captures true speech. 
+Automatic MOM generation after the call ends **(which is not shown in the video).**
 
 ## Features
 
@@ -99,6 +99,11 @@ VOICE_MODEL=en_US-amy-low.onnx
 
 ### 7  Run the application
 
+Ensure that asterisks is properly setup and Zoiper(telephony) is connected. 
+```bash
+DIAL: 555 on Zoiper (or choose your own number)
+```
+
 Run directly with Python:
 
 ```bash
@@ -127,7 +132,7 @@ python main.py
 
 Once the bot is running, it will listen for incoming calls on the configured ARI endpoint. 
 
-- To initiate an **outbound call** manually, type `call` in the terminal when prompted.
+- To initiate an **outbound call** manually, type `call` in the terminal after running `main.py`.
 - The bot will generate a `minutes_of_meeting.txt` file in the `src/` directory after each call session ends.
 
 ## 🛰️Architecture
