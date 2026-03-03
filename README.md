@@ -72,18 +72,22 @@ wget -O en_US-amy-low.onnx.json "https://huggingface.co/rhasspy/piper-voices/res
     [general]
     enabled = yes
     pretty = yes
-    allowed_origins = *
 
     [brain]
     type = user
     read_only = no
     password = 1234
-    password_format = plain
     ```
 3.  **Establish Path (`/etc/asterisk/extensions.conf`)**:
     ```ini
-    [default]
-    exten => 1000,1,NoOp(Route to AI Core)
+    [from-internal]
+    exten => 555,1,Answer()
+     same => n,Set(CALL_TYPE=inbound)
+     same => n,Stasis(ai-bot)
+     same => n,Hangup()
+    
+    exten => 6002,1,NoOp(Call Bot for 6002)
+     same => n,Set(CALL_TYPE=outbound)
      same => n,Stasis(ai-bot)
      same => n,Hangup()
     ```
