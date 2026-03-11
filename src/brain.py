@@ -50,7 +50,7 @@ Naturally ask questions during the conversation to gather:
 - If the user indicates they are done (e.g., "That's all", "Bye"), ask: "Is there anything else I can assist you with?"
 - If they say "No":
   1. Say a professional goodbye.
-  2. Append the token `[HANGUP]` at the very end of your response.
+  2. Tell them that our team will get back to them as soon as possible.
 
 **Voice Call Constraints (CRITICAL):**
 - You are speaking on a voice call.
@@ -94,36 +94,36 @@ Naturally ask questions during the conversation to gather:
 
         # 2. Create a NEW prompt for the model (forcing a persona switch)
         mom_prompt = f"""
-You are an expert Conversation Analyst and Meeting Scribe. Your task is to process the raw transcript of a conversation between an AI Bot and a User and generate a structured "Minutes of the Meeting" (MOM) document.
+You are an expert Conversation Analyst and Meeting Scribe. Your task is to process the raw transcript of a conversation and generate a structured "Minutes of the Meeting" (MOM) document.
 
 **Objective:**
-Analyze the dialogue to extract critical information, specifically focusing on the user's intent, interests, and the core progression of the discussion.
+Analyze the dialogue to extract critical information, specifically focusing on the participants' intent, interests, and the core progression of the discussion.
 
 **Instructions:**
 1.  **Analyze Context:** Read the entire conversation history provided.
-2.  **Identify Interests:** specifically look for signals regarding what the user liked, asked about repeatedly, or reacted positively to.
+2.  **Identify Interests:** specifically look for signals regarding what the participants liked, asked about repeatedly, or reacted positively to.
 3.  **Extract Key Points:** Summarize the main topics discussed, removing conversational filler (greetings, small talk).
-4.  **Determine Status:** Conclude with the final state of the interaction (e.g., issue resolved, follow-up needed, sale closed).
+4.  **Determine Status:** Conclude with the final state of the interaction (e.g., issue resolved, follow-up needed, next meeting scheduled).
 
 **Output Format:**
-You must provide the output in the following Markdown format:
+You must provide the output in plain text format without any markdown (no #, *, or bolding). Use the following structure:
 
-### 1. Executive Summary
-A 1-2 sentence overview of what the call was about.
+1. EXECUTIVE SUMMARY
+[Summary here]
 
-### 2. User Profile & Interests
-* **Primary Interest:** (What was the user most interested in?)
-* **Sentiment:** (Positive/Neutral/Negative)
-* **Key Pain Points/Needs:** (What specific problems or desires did they express?)
+2. PARTICIPANT PROFILES & INTERESTS
+- Primary Interest: [Interest]
+- Sentiment: [Sentiment]
+- Key Pain Points/Needs: [Needs]
 
-### 3. Key Discussion Points
-* [Point 1]
-* [Point 2]
-* [Point 3]
+3. KEY DISCUSSION POINTS
+- [Point 1]
+- [Point 2]
+- [Point 3]
 
-### 4. Action Items / Next Steps
-* [Bot/Company Action]
-* [User Action]
+4. ACTION ITEMS / NEXT STEPS
+- [Action 1]
+- [Action 2]
 
 ---
 **Input Data:**
@@ -132,6 +132,59 @@ A 1-2 sentence overview of what the call was about.
         
         try:
             # 3. Send as a fresh request (stateless)
+            response = self.model.generate_content(mom_prompt)
+            return response.text
+        except Exception as e:
+            return f"Error generating MoM: {e}"
+
+    def generate_mom_from_transcript(self, transcript: str):
+        """
+        Generates a minutes of the meeting based on a raw transcript string. for the smart secretary part.
+        """
+        print("[Brain] Generating Minutes of Meeting from transcript...")
+        
+        # Create a NEW prompt for the model (forcing a persona switch)
+        mom_prompt = f"""
+You are an expert Conversation Analyst and Meeting Scribe. Your task is to process the raw transcript of a conversation and generate a structured "Minutes of the Meeting" (MOM) document.
+
+**Objective:**
+Analyze the dialogue to extract critical information, specifically focusing on the participants' intent, interests, and the core progression of the discussion.
+
+**Instructions:**
+1.  **Analyze Context:** Read the entire conversation history provided.
+2.  **Identify Interests:** specifically look for signals regarding what the participants liked, asked about repeatedly, or reacted positively to.
+3.  **Extract Key Points:** Summarize the main topics discussed, removing conversational filler (greetings, small talk).
+4.  **Determine Status:** Conclude with the final state of the interaction (e.g., issue resolved, follow-up needed, next meeting scheduled).
+
+**Output Format:**
+You must provide the output in plain text format without any markdown (no #, *, or bolding). Use the following structure:
+
+1. EXECUTIVE SUMMARY
+[Summary here]
+
+2. PARTICIPANT PROFILES & INTERESTS
+- Primary Interest: [Interest]
+- Sentiment: [Sentiment]
+- Key Pain Points/Needs: [Needs]
+
+3. KEY DISCUSSION POINTS
+- [Point 1]
+- [Point 2]
+- [Point 3]
+
+4. ACTION ITEMS / NEXT STEPS
+- [Action 1]
+- [Action 2]
+
+5. DETAILED SUMMARY
+[Detailed summary here] which includes a more detailed analysis of the conversation, including any additional insights.
+---
+**Input Data:**
+{transcript}
+"""
+        
+        try:
+            # Send as a fresh request (stateless)
             response = self.model.generate_content(mom_prompt)
             return response.text
         except Exception as e:
@@ -172,4 +225,4 @@ A 1-2 sentence overview of what the call was about.
             if self.history and self.history[-1]["role"] == "user":
                  self.history.pop()
                  
-            yield "fuck off buddy ! (API Error: " + str(e) + ")"
+            yield "not working buddy ! (API Error: " + str(e) + ")"
