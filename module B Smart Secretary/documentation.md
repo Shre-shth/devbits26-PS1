@@ -46,7 +46,7 @@ Ideal for developers who have already activated the virtual environment:
 ```bash
 # 1. Activate environment
 source .venv/bin/activate
-# 2. Run as module
+# 2. Run as module (assuming you are in devbits26-PS1 directory)
 python3 -m "module B Smart Secretary.secretary" "path/to/recording.mp3"
 ```
 
