@@ -1,132 +1,145 @@
 import os
 import sys
-import ctypes
-import numpy as np
-
-# --- NVIDIA Library Workaround ---
-try:
-    # 1. Collect potential search paths
-    search_paths = []
-    if "LD_LIBRARY_PATH" in os.environ:
-        search_paths.extend(os.environ["LD_LIBRARY_PATH"].split(":"))
-    
-    # Add common .venv paths relative to this file
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    search_paths.append(os.path.join(project_root, ".venv/lib/python3.12/site-packages/nvidia/cublas/lib"))
-    search_paths.append(os.path.join(project_root, ".venv/lib/python3.12/site-packages/nvidia/cudnn/lib"))
-
-    for path in search_paths:
-        if not path or not os.path.exists(path):
-            continue
-        
-        # libcublas requires libcublasLt, so load Lt first if present
-        lib_lt = os.path.join(path, "libcublasLt.so.12")
-        if os.path.exists(lib_lt):
-            try:
-                ctypes.CDLL(lib_lt, mode=ctypes.RTLD_GLOBAL)
-            except Exception as e:
-                pass 
-
-        lib_cublas = os.path.join(path, "libcublas.so.12")
-        if os.path.exists(lib_cublas):
-            try:
-                ctypes.CDLL(lib_cublas, mode=ctypes.RTLD_GLOBAL)
-            except Exception as e:
-                pass
-
-        # Load all .so.8 files for cuDNN if present
-        for filename in os.listdir(path):
-            if filename.endswith(".so.8"):
-                 try:
-                     filepath = os.path.join(path, filename)
-                     ctypes.CDLL(filepath, mode=ctypes.RTLD_GLOBAL)
-                 except Exception:
-                     pass 
-except Exception as e:
-    print(f"[Warn] NVIDIA library workaround failed: {e}")
-# -----------------------------
-
-from faster_whisper import WhisperModel, decode_audio
-from scipy.io import wavfile
+import time
+import subprocess
+import concurrent.futures
+from sarvamai import SarvamAI
 from src.brain import Brain
 from dotenv import load_dotenv
 
-# Add parent directory to path to allow importing from src
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+def split_audio_ffmpeg(audio_path, output_dir, segment_time=28):
+    """
+    Splits audio into small segments using ffmpeg.
+    """
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    # Clear directory if it exists
+    for f in os.listdir(output_dir):
+        if f.startswith("segment_"):
+            os.remove(os.path.join(output_dir, f))
 
-def process_recording(mp3_path, model_size="large-v3"):
+    segment_pattern = os.path.join(output_dir, "segment_%03d.mp3")
+    
+    # Using -c copy to split without re-encoding (instant)
+    # If copy fails because of bitstream issues, we might need to re-encode,
+    # but for most mp3/wav it's fine.
+    cmd = [
+        "ffmpeg", "-y", "-i", audio_path,
+        "-f", "segment",
+        "-segment_time", str(segment_time),
+        "-c", "copy",
+        segment_pattern
+    ]
+    
+    print(f"Quick-splitting audio into {segment_time}s chunks...")
+    subprocess.run(cmd, check=True, capture_output=True)
+    
+    segments = sorted([os.path.join(output_dir, f) for f in os.listdir(output_dir) if f.startswith("segment_")])
+    return segments
+
+def transcribe_chunk(api_key, chunk_path, model):
     """
-    Processes a call recording (mp3), transcribes it, and generates MOM.
+    Transcribes a single small chunk (< 30s) via standard Sarvam API.
+    A new client is created per thread to be safe.
     """
-    if not os.path.exists(mp3_path):
-        print(f"Error: File '{mp3_path}' not found.")
+    try:
+        client = SarvamAI(api_subscription_key=api_key)
+        with open(chunk_path, "rb") as f:
+            response = client.speech_to_text.transcribe(
+                file=f,
+                model=model,
+                mode="transcribe"
+            )
+        # Extract transcript.
+        # Sarvam API returns an object; getattr handles potential string/obj types.
+        transcript = getattr(response, 'transcript', str(response))
+        return transcript.strip()
+    except Exception as e:
+        # Don't fail the whole process for one chunk if we can avoid it
+        print(f"\n[Warning] Chunk {os.path.basename(chunk_path)} failed: {e}")
+        return ""
+
+def process_recording(audio_path, model_size="saaras:v3"):
+    """
+    High-Speed Parallel Processing:
+    Divides audio into <30s slices and transcribes them concurrently.
+    """
+    if not os.path.exists(audio_path):
+        print(f"Error: File '{audio_path}' not found.")
         return
 
     load_dotenv()
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
+    sarvam_api_key = os.getenv("SARVAM_API_KEY")
+    if not sarvam_api_key:
+        print("Error: SARVAM_API_KEY not found in .env.")
+        return
+
+    google_api_key = os.getenv("GOOGLE_API_KEY")
+    if not google_api_key:
         print("Error: GOOGLE_API_KEY not found in environment.")
         return
 
-    # 1. Load Faster-Whisper Model
-    device = "cpu"
-    compute_type = "int8"
+    file_name = os.path.basename(audio_path)
+    audio_base = os.path.splitext(file_name)[0]
+    module_b_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Create temp directory for chunks
+    temp_dir = os.path.join(module_b_dir, f"temp_{audio_base}")
     
     try:
-        import ctranslate2
-        if ctranslate2.get_cuda_device_count() > 0:
-            print("GPU Detected! Switching to CUDA.")
-            device = "cuda"
-            # Use int8_float16 to significantly reduce VRAM usage for large models
-            compute_type = "int8_float16" if "large" in model_size else "float16"
+        # 1. Split audio
+        chunks = split_audio_ffmpeg(audio_path, temp_dir)
+        num_chunks = len(chunks)
+        print(f"Created {num_chunks} chunks for parallel processing.")
+
+        # 2. Parallel Transcription
+        print(f"Transcribing {num_chunks} chunks in parallel (please wait)...")
+        results = []
+        # Using 5 workers to be polite to the API/Connection, can increase if needed
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            # Future to track index to maintain order
+            future_to_idx = {executor.submit(transcribe_chunk, sarvam_api_key, chunk, model_size): i 
+                             for i, chunk in enumerate(chunks)}
+            
+            # Initialize placeholder results list
+            results = [""] * num_chunks
+            
+            for future in concurrent.futures.as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                results[idx] = future.result()
+                sys.stdout.write("█")
+                sys.stdout.flush()
+
+        print("\nParallel transcription complete.")
+        full_transcript = " ".join([r for r in results if r])
+        formatted_transcript = full_transcript
+
     except Exception as e:
-        print(f"GPU Check Failed: {e}. Defaulting to CPU.")
+        print(f"\nParallel Processing Failed: {e}")
+        return
+    finally:
+        # Cleanup temp chunks
+        if os.path.exists(temp_dir):
+            import shutil
+            shutil.rmtree(temp_dir)
 
-    print(f"Loading Whisper model: {model_size} on {device} ({compute_type})...")
-    model = WhisperModel(model_size, device=device, compute_type=compute_type)
-    print("Whisper model loaded.")
-
-    # 2. Preprocess and Transcribe MP3
-    print(f"Preprocessing and Transcribing '{mp3_path}'...")
-    
-    # Manually decode audio to 16kHz mono (what Whisper hears)
-    audio = decode_audio(mp3_path, sampling_rate=16000)
-    
-    module_b_dir = os.path.dirname(os.path.abspath(__file__))
-    base_name = os.path.basename(mp3_path)
-    audio_base = os.path.splitext(base_name)[0]
-
-    segments, info = model.transcribe(audio, beam_size=5)
-    
-    print(f"Detected language '{info.language}' with probability {info.language_probability:.2f}")
-
-    transcript = ""
-    formatted_transcript = ""
-    for segment in segments:
-        line = f"[{segment.start:.2f}s -> {segment.end:.2f}s] {segment.text}"
-        print(line)
-        transcript += f"{segment.text} "
-        formatted_transcript += f"{line}\n"
-    
-    transcript = transcript.strip()
-    formatted_transcript = formatted_transcript.strip()
-    
-    if not transcript:
+    if not full_transcript.strip():
         print("No speech detected in the recording.")
         return
 
     # 3. Generate MOM
     print("\nGenerating Minutes of Meeting...")
-    brain = Brain(api_key=api_key)
+    brain = Brain(api_key=google_api_key)
     # Give Brain the clean transcript for better analysis
-    mom = brain.generate_mom_from_transcript(transcript)
+    mom = brain.generate_mom_from_transcript(full_transcript)
     
     print("\n--- MINUTES OF MEETING ---")
     print(mom)
     print("--------------------------")
 
     # 4. Save results in module B
-    # Fixed filenames (for easy access to the latest run)
+    # Historical names: call_transcript.txt and minutes_of_Meeting.txt
     fixed_transcript = os.path.join(module_b_dir, "call_transcript.txt")
     fixed_mom = os.path.join(module_b_dir, "minutes_of_Meeting.txt")
     
@@ -147,21 +160,20 @@ def process_recording(mp3_path, model_size="large-v3"):
         f.write(mom)
 
     print(f"\nResults saved in '{module_b_dir}':")
-    print(f"- Latest: transcript.txt, mom.txt")
+    print(f"- Latest: call_transcript.txt, minutes_of_Meeting.txt")
     print(f"- Specific: {audio_base}_transcript.txt, {audio_base}_mom.txt")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python -m module\\ B.secretary <path_to_mp3_file> [model_size]")
+        print('Usage: python -m "module B Smart Secretary.secretary" <path_to_audio_file> [model_name]')
         sys.exit(1)
     
-    mp3_file = sys.argv[1]
-    size = sys.argv[2] if len(sys.argv) > 2 else "large-v3"
+    audio_file = sys.argv[1]
+    model = sys.argv[2] if len(sys.argv) > 2 else "saaras:v3"
     
-    # Simple fix for module path imports if run as script
-    # Ensure src is importable
+    # Ensure src is importable (needed if running as a script)
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
         
-    process_recording(mp3_file, size)
+    process_recording(audio_file, model)
