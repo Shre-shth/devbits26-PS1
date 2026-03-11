@@ -1,7 +1,7 @@
 # SMART SECRETARY (MODULE B) - TECHNICAL DOCUMENTATION
 
 ## 1. Overview
-The Smart Secretary is a high-performance audio transcription and meeting summarization tool designed to process call recordings. It utilizes state-of-the-art Speech-to-Text (STT) and Large Language Models (LLM) to convert raw audio into timestamped transcripts and actionable Minutes of Meeting (MOM).
+The Smart Secretary is a high-performance audio transcription and meeting summarization tool designed to process call recordings. It utilizes Sarvam ai's Speech-to-Text (STT) and Large Language Models (LLM) to convert raw audio into transcripts and actionable Minutes of Meeting (MOM).
 
 ## 2. Core Technology: Sarvam AI (High-Speed Parallel Processing)
 We use **Sarvam AI's standard Speech-to-Text API** with a custom high-performance parallel chunking engine. This approach is designed to provide the fastest possible transcription for call recordings of any length.
