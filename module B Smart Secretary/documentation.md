@@ -41,19 +41,19 @@ Ensure your **`SARVAM_API_KEY`** and **`GOOGLE_API_KEY`** are correctly set in t
 
 You can execute the Smart Secretary from the **project root** using any of the following methods:
 
-### Method A: Direct Python Execution (Recommended)
-Use this if you want to use the virtual environment's Python directly:
-```bash
-.venv/bin/python3 "module B Smart Secretary/secretary.py" "path/to/recording.mp3"
-```
-
-### Method B: Python Module Execution
+### Method A: Python Module Execution (Recommended)
 Ideal for developers who have already activated the virtual environment:
 ```bash
 # 1. Activate environment
 source .venv/bin/activate
 # 2. Run as module
 python3 -m "module B Smart Secretary.secretary" "path/to/recording.mp3"
+```
+
+### Method B: Direct Python Execution 
+Use this if you want to use the virtual environment's Python directly:
+```bash
+.venv/bin/python3 "module B Smart Secretary/secretary.py" "path/to/recording.mp3"
 ```
 
 ### Method C: The Script (Change the script with correct paths) (Not recommended)
