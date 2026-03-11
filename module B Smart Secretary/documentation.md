@@ -1,7 +1,7 @@
 # SMART SECRETARY (MODULE B) - TECHNICAL DOCUMENTATION
 
 ## 1. Overview
-The Smart Secretary is a high-performance audio transcription and meeting summarization tool designed to process call recordings. It utilizes Sarvam ai's Speech-to-Text (STT) and Large Language Models (LLM) to convert raw audio into transcripts and actionable Minutes of Meeting (MOM).
+The Smart Secretary is a high-performance audio transcription and meeting summarization tool designed to process call recordings. It utilizes state-of-the-art Speech-to-Text (STT) and Large Language Models (LLM) to convert raw audio into timestamped transcripts and actionable Minutes of Meeting (MOM).
 
 ## 2. Core Technology: Sarvam AI (High-Speed Parallel Processing)
 We use **Sarvam AI's standard Speech-to-Text API** with a custom high-performance parallel chunking engine. This approach is designed to provide the fastest possible transcription for call recordings of any length.
@@ -24,19 +24,52 @@ Because transcription is now API-driven, the hardware requirements for Module B 
 *   **Internet Connection**: Required to connect to the Sarvam AI API.
 *   **CPU/RAM**: Any modern multicore processor with 4GB+ RAM is sufficient.
 *   **GPU**: No longer required for transcription in Module B.
-*   **Timestamping**: Generates a `call_transcript.txt` with precise `[start -> end]` time frames for every segment.
+
+---
+
+## 3. Features
 *   **MOM Generation**: Integration with Gemini (Brain) to generate professional summaries in `minutes_of_Meeting.txt`.
-*   **File Management**:
+*   **Multilingual Support**: Optimized for Indian languages and code-switching (Hinglish).
+*   **Unified File Management**:
     *   `call_transcript.txt` / `minutes_of_Meeting.txt`: Contains the results of the LATEST run.
     *   `[filename]_transcript.txt` / `[filename]_mom.txt`: Contains specific historical records named after your audio file.
 
-## 6. How to Run
-Must ensure that the api key is set in the .env file. SARVAM_API_KEY=your_api_key
-You can run the secretary from any directory, but the script is located in `module B Smart Secretary`.
-```bash 
-"./module B Smart Secretary/run_secretary.sh" "path/to/your/audio.mp3"
-```
-Or if you are already inside the `module B Smart Secretary` folder:
+---
+
+## 4. How to Run
+Ensure your **`SARVAM_API_KEY`** and **`GOOGLE_API_KEY`** are correctly set in the `.env` file at the project root.
+
+You can execute the Smart Secretary from the **project root** using any of the following methods:
+
+### Method A: Direct Python Execution (Recommended)
+Use this if you want to use the virtual environment's Python directly:
 ```bash
-./run_secretary.sh "path/to/your/audio.mp3"
+.venv/bin/python3 "module B Smart Secretary/secretary.py" "path/to/recording.mp3"
 ```
+
+### Method B: Python Module Execution
+Ideal for developers who have already activated the virtual environment:
+```bash
+# 1. Activate environment
+source .venv/bin/activate
+# 2. Run as module
+python3 -m "module B Smart Secretary.secretary" "path/to/recording.mp3"
+```
+
+### Method C: The Script (Change the script with correct paths) (Not recommended)
+The fastest way to run the secretary with all environment variables pre-configured.
+```bash
+./"module B Smart Secretary/run_secretary.sh" "path/to/recording.mp3"
+```
+
+---
+
+## 5. Output and Results
+After execution, the following files are generated in the `module B Smart Secretary/` directory:
+
+| File Type | Naming Convention | Purpose |
+| :--- | :--- | :--- |
+| **Latest Transcript** | `call_transcript.txt` | The transcript of the most recent run. |
+| **Latest MOM** | `minutes_of_Meeting.txt` | The MOM of the most recent run. |
+| **Historical Record** | `[filename]_transcript.txt` | Dated transcript for reference. |
+| **Historical Record** | `[filename]_mom.txt` | Dated MOM for reference. |
