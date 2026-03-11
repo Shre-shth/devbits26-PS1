@@ -1,18 +1,20 @@
-# STT and VAD
+# STT & VAD
 faster-whisper
 onnxruntime
+sarvamai
+ctranslate2
 
-# TTS and Audio Processing
+# TTS & Audio 
 piper-tts
 scipy
 
-#for LLM and MOM 
+# LLM & Analysis (Google Gemini)
 google-generativeai
 
-#ARI Connectivity
+# Connectivity & ARI
 requests
 websocket-client
 
-# python utilities 
+# Core Utilities
 numpy
 python-dotenv
